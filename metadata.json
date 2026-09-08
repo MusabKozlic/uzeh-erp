@@ -1,0 +1,6 @@
+{
+  "name": "Uzeh ERP",
+  "description": "Cloud ERP sistem za trgovinsko poslovanje Uzeh.ba sa zalihama, nabavkom, kalkulacijama, nivelacijama, prodajom i TKM izvještavanjem",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
