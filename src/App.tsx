@@ -64,14 +64,69 @@ const VIEW_TITLES: Record<NavView, string> = {
   database_schema: 'Supabase PostgreSQL Baza & DDL Migracija',
 };
 
+const NAV_VIEWS = new Set<NavView>(Object.keys(VIEW_TITLES) as NavView[]);
+
+function getRouteFromPath(pathname: string): { view: NavView; productId?: string } {
+  const segments = pathname.split('/').filter(Boolean);
+  const route = segments[0];
+
+  if (route === 'products' && segments[1]) {
+    return { view: 'product_detail', productId: decodeURIComponent(segments[1]) };
+  }
+
+  if (route && NAV_VIEWS.has(route as NavView)) {
+    return { view: route as NavView };
+  }
+
+  return { view: 'dashboard' };
+}
+
+function getPathForView(view: NavView, productId?: string) {
+  if (view === 'product_detail' && productId) {
+    return `/products/${encodeURIComponent(productId)}`;
+  }
+
+  return `/${view}`;
+}
+
 function ERPAppContent() {
-  const [activeTab, setActiveTab] = useState<NavView>('dashboard');
+  const initialRoute = getRouteFromPath(window.location.pathname);
+  const [activeTab, setActiveTab] = useState<NavView>(initialRoute.view);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   const { products } = useERP();
   const toast = useToast();
+
+  const navigateTo = (view: NavView, productId?: string, replace = false) => {
+    const nextPath = getPathForView(view, productId);
+    if (window.location.pathname !== nextPath) {
+      window.history[replace ? 'replaceState' : 'pushState']({}, '', nextPath);
+    }
+    setActiveTab(view);
+    setIsMobileMenuOpen(false);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = getRouteFromPath(window.location.pathname);
+      setActiveTab(route.view);
+      if (route.productId) {
+        const product = products.find((item) => item.id === route.productId);
+        if (product) setSelectedProduct(product);
+      }
+    };
+
+    const route = getRouteFromPath(window.location.pathname);
+    if (route.productId) {
+      const product = products.find((item) => item.id === route.productId);
+      if (product) setSelectedProduct(product);
+    }
+    window.history.replaceState({}, '', getPathForView(route.view, route.productId));
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [products]);
 
   // Global Keyboard Shortcuts (Ctrl+K, Ctrl+N, Ctrl+S, Escape)
   useEffect(() => {
@@ -86,14 +141,14 @@ function ERPAppContent() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         if (activeTab === 'kalkulacije') {
-          setActiveTab('purchase_entry');
+          navigateTo('purchase_entry');
           toast.info('Otvaranje unosa novog ulaza robe...');
         } else if (activeTab === 'products') {
           toast.info('Otvaranje dijaloga za novi artikal...');
         } else if (activeTab === 'sales') {
           toast.info('Otvaranje novog POS računa...');
         } else {
-          setActiveTab('purchase_entry');
+          navigateTo('purchase_entry');
           toast.info('Otvaranje novog dokumenta...');
         }
       }
@@ -121,13 +176,13 @@ function ERPAppContent() {
 
   const handleOpenProductDetail = (p: Product) => {
     setSelectedProduct(p);
-    setActiveTab('product_detail');
+    navigateTo('product_detail', p.id);
   };
 
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView onNavigate={(tab) => setActiveTab(tab as NavView)} />;
+        return <DashboardView onNavigate={(tab) => navigateTo(tab as NavView)} />;
 
       // Artikli & Cijene
       case 'products':
@@ -136,10 +191,10 @@ function ERPAppContent() {
         return (
           <ProductDetailView
             product={selectedProduct || products[0]}
-            onBack={() => setActiveTab('products')}
+            onBack={() => navigateTo('products')}
             onEdit={(p) => {
               setSelectedProduct(p);
-              setActiveTab('products');
+              navigateTo('products');
             }}
           />
         );
@@ -158,12 +213,12 @@ function ERPAppContent() {
       case 'purchase_entry':
         return (
           <PurchaseEntryView
-            onFinish={() => setActiveTab('kalkulacije')}
-            onCancel={() => setActiveTab('kalkulacije')}
+            onFinish={() => navigateTo('kalkulacije')}
+            onCancel={() => navigateTo('kalkulacije')}
           />
         );
       case 'kalkulacije':
-        return <KalkulacijeView onNavigateNewEntry={() => setActiveTab('purchase_entry')} />;
+        return <KalkulacijeView onNavigateNewEntry={() => navigateTo('purchase_entry')} />;
       case 'suppliers':
         return <GenericDocumentListView type="suppliers" />;
       case 'supplier_returns':
@@ -194,35 +249,35 @@ function ERPAppContent() {
         return (
           <ReportsView
             initialType="report_sales"
-            onNavigate={(tab) => setActiveTab(tab as NavView)}
+            onNavigate={(tab) => navigateTo(tab as NavView)}
           />
         );
       case 'report_purchases':
         return (
           <ReportsView
             initialType="report_purchases"
-            onNavigate={(tab) => setActiveTab(tab as NavView)}
+            onNavigate={(tab) => navigateTo(tab as NavView)}
           />
         );
       case 'report_stock':
         return (
           <ReportsView
             initialType="report_stock"
-            onNavigate={(tab) => setActiveTab(tab as NavView)}
+            onNavigate={(tab) => navigateTo(tab as NavView)}
           />
         );
       case 'report_margins':
         return (
           <ReportsView
             initialType="report_margins"
-            onNavigate={(tab) => setActiveTab(tab as NavView)}
+            onNavigate={(tab) => navigateTo(tab as NavView)}
           />
         );
       case 'report_tkm':
         return (
           <ReportsView
             initialType="report_tkm"
-            onNavigate={(tab) => setActiveTab(tab as NavView)}
+            onNavigate={(tab) => navigateTo(tab as NavView)}
           />
         );
 
@@ -243,7 +298,7 @@ function ERPAppContent() {
         return <DatabaseSchemaView />;
 
       default:
-        return <DashboardView onNavigate={(tab) => setActiveTab(tab as NavView)} />;
+        return <DashboardView onNavigate={(tab) => navigateTo(tab as NavView)} />;
     }
   };
 
@@ -252,10 +307,7 @@ function ERPAppContent() {
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
-        onSelectTab={(tab) => {
-          setActiveTab(tab);
-          setIsMobileMenuOpen(false);
-        }}
+        onSelectTab={(tab) => navigateTo(tab)}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
@@ -266,8 +318,8 @@ function ERPAppContent() {
           currentViewTitle={VIEW_TITLES[activeTab] || 'Uzeh ERP'}
           onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-          onNavigateSettings={() => setActiveTab('settings')}
-          onNavigateAuditLogs={() => setActiveTab('audit_logs')}
+          onNavigateSettings={() => navigateTo('settings')}
+          onNavigateAuditLogs={() => navigateTo('audit_logs')}
         />
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7">
@@ -284,15 +336,15 @@ function ERPAppContent() {
             const p = products.find((prod) => prod.id === extra.selectedProductId);
             if (p) {
               setSelectedProduct(p);
-              setActiveTab('product_detail');
+    navigateTo('product_detail', p.id);
               return;
             }
           }
-          setActiveTab(viewId as NavView);
+          navigateTo(viewId as NavView);
         }}
-        onOpenNewPurchase={() => setActiveTab('purchase_entry')}
-        onOpenNewCalculation={() => setActiveTab('purchase_entry')}
-        onOpenNewPriceAdjustment={() => setActiveTab('nivelacije')}
+        onOpenNewPurchase={() => navigateTo('purchase_entry')}
+        onOpenNewCalculation={() => navigateTo('purchase_entry')}
+        onOpenNewPriceAdjustment={() => navigateTo('nivelacije')}
       />
     </div>
   );
